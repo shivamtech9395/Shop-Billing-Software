@@ -2,7 +2,7 @@
 Emergency admin recovery script.
 Run this from the backend folder if you ever get locked out:
 
-    python fix_admin.py
+    python3 fix_admin.py
 
 It will:
 1. Reactivate every admin account that was deactivated

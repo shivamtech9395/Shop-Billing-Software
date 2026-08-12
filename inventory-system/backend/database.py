@@ -1,9 +1,14 @@
 """
 Database setup + SQLAlchemy models.
-Uses SQLite by default (zero-config, file-based) -- good enough for a single
-shop. If the shop grows / wants multi-branch, swap DATABASE_URL for a
-postgres connection string and nothing else needs to change.
+
+Uses SQLite by default (zero-config, file-based) for local use.
+
+For cloud deployment (Render, Railway, etc.), set a DATABASE_URL
+environment variable pointing to a Postgres database -- this keeps your
+data safe even if the hosting platform wipes the local disk on restart.
+Example: postgresql://user:password@host/dbname
 """
+import os
 from sqlalchemy import (
     create_engine, Column, Integer, String, Float, Boolean,
     DateTime, ForeignKey, Text
@@ -11,11 +16,15 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
 
-DATABASE_URL = "sqlite:///./inventory.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./inventory.db")
 
-engine = create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False}
-)
+# Some hosts (Render, old Heroku) hand out URLs starting with "postgres://",
+# but modern SQLAlchemy requires "postgresql://" -- fix it automatically.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

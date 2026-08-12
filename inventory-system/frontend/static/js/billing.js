@@ -4,7 +4,7 @@ document.getElementById("empName").textContent = API.getName();
 let cart = []; // { product, quantity, price_override }
 let scanMode = localStorage.getItem("scan_mode") || "camera";
 let html5QrCode = null;
-let cameraPaused = false;
+let scanLocked = false; // true from the instant ANY code is detected until the preview is closed
 let stagedProduct = null;
 let stagedQty = 1;
 let lastCompletedTransaction = null;
@@ -65,8 +65,7 @@ function startCamera() {
     { facingMode: "environment" },
     { fps: 10, qrbox: { width: 220, height: 220 } },
     (decodedText) => {
-      if (cameraPaused || stagedProduct) return; // don't re-trigger while a preview is open
-      cameraPaused = true;
+      if (scanLocked) return; // ignore every extra frame while a scan is already being handled
       if (html5QrCode) html5QrCode.pause(true);
       lookupCode(decodedText);
     },
@@ -77,7 +76,6 @@ function startCamera() {
 }
 
 function resumeCamera() {
-  cameraPaused = false;
   if (html5QrCode && scanMode === "camera") {
     try { html5QrCode.resume(); } catch (e) { /* already running */ }
   }
@@ -102,35 +100,40 @@ document.getElementById("scannerCaptureInput").addEventListener("keydown", (e) =
   if (e.key === "Enter") {
     const val = e.target.value.trim();
     e.target.value = "";
-    if (val && !stagedProduct) lookupCode(val);
+    if (val) lookupCode(val);
   }
 });
 
 document.addEventListener("click", () => {
-  if (scanMode === "scanner" && !stagedProduct) setTimeout(focusScannerInput, 50);
+  if (scanMode === "scanner" && !scanLocked) setTimeout(focusScannerInput, 50);
 });
 
 // ============================================================
 // LOOKUP -> SHOW PREVIEW (confirm before adding, avoids duplicate scans)
 // ============================================================
 async function lookupCode(code) {
-  if (!code) return;
+  if (!code || scanLocked) return;
+  scanLocked = true; // locked the instant a code comes in -- released only when the preview closes or lookup fails
   document.getElementById("manualCode").value = "";
   try {
     const product = await API.get(`/api/scan/${encodeURIComponent(code)}`);
     if (product.quantity < 1) {
       showToast("This product is out of stock", "danger");
-      resumeCamera();
-      if (scanMode === "scanner") focusScannerInput();
+      releaseLock();
       return;
     }
     showPreview(product);
     if (navigator.vibrate) navigator.vibrate(60);
   } catch (err) {
     showToast(err.message, "danger");
-    resumeCamera();
-    if (scanMode === "scanner") focusScannerInput();
+    releaseLock();
   }
+}
+
+function releaseLock() {
+  scanLocked = false;
+  resumeCamera();
+  if (scanMode === "scanner") focusScannerInput();
 }
 
 function showPreview(product) {
@@ -164,8 +167,7 @@ function cancelPreview() {
 function closePreview() {
   stagedProduct = null;
   document.getElementById("scanPreview").classList.remove("show");
-  resumeCamera();
-  if (scanMode === "scanner") focusScannerInput();
+  releaseLock();
 }
 
 // ============================================================
@@ -303,8 +305,28 @@ async function checkout() {
 function showSuccessModal(txn) {
   document.getElementById("successSummary").textContent =
     `Bill #${txn.id} · ${formatMoney(txn.total_amount)}` + (txn.customer_name ? ` · ${txn.customer_name}` : "");
-  document.getElementById("whatsappBtn").style.display = txn.customer_phone ? "block" : "none";
+
+  const whatsappBtn = document.getElementById("whatsappBtn");
+  if (txn.customer_phone) {
+    whatsappBtn.href = buildWhatsappLink(txn);
+    whatsappBtn.style.display = "flex";
+  } else {
+    whatsappBtn.style.display = "none";
+  }
   document.getElementById("successModalOverlay").classList.add("show");
+}
+
+function buildWhatsappLink(txn) {
+  const lines = [`*Bill #${txn.id}*`, new Date(txn.created_at).toLocaleString("en-IN"), ""];
+  txn.items.forEach(item => {
+    lines.push(`${item.product_name_snapshot} x${item.quantity} = ${formatMoney(item.price_at_sale * item.quantity)}`);
+  });
+  lines.push("");
+  lines.push(`Total: ${formatMoney(txn.total_amount)}`);
+  lines.push("Thank you for shopping with us!");
+  const message = lines.join("\n");
+  const digitsOnly = (txn.customer_phone || "").replace(/\D/g, "");
+  return `https://wa.me/${digitsOnly}?text=${encodeURIComponent(message)}`;
 }
 
 function closeSuccessModal() {
@@ -330,16 +352,6 @@ async function viewPdf(download) {
     }
   } catch (err) {
     showToast("Could not load the bill PDF", "danger");
-  }
-}
-
-async function shareWhatsapp() {
-  if (!lastCompletedTransaction) return;
-  try {
-    const res = await API.get(`/api/billing/transactions/${lastCompletedTransaction.id}/whatsapp-link`);
-    window.open(res.link, "_blank");
-  } catch (err) {
-    showToast(err.message, "danger");
   }
 }
 

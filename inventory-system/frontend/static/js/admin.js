@@ -107,13 +107,56 @@ function toggleCommissionFields() {
   document.getElementById("commissionFields").classList.toggle("show", document.getElementById("p_commission_enabled").checked);
 }
 
-function openProductModal(product) {
+// ============================================================
+// SCAN LABEL (AI reads a photo of the product's existing tag)
+// ============================================================
+function openScanLabelModal() {
+  document.getElementById("scanLabelIdle").style.display = "block";
+  document.getElementById("scanLabelLoading").style.display = "none";
+  document.getElementById("scanLabelError").style.display = "none";
+  document.getElementById("labelFileInput").value = "";
+  document.getElementById("scanLabelModalOverlay").classList.add("show");
+}
+function closeScanLabelModal() {
+  document.getElementById("scanLabelModalOverlay").classList.remove("show");
+}
+
+async function handleLabelFile(file) {
+  if (!file) return;
+  document.getElementById("scanLabelIdle").style.display = "none";
+  document.getElementById("scanLabelError").style.display = "none";
+  document.getElementById("scanLabelLoading").style.display = "block";
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/products/scan-label", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + API.getToken() },
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Could not read the label");
+
+    closeScanLabelModal();
+    openProductModal(null, { name: data.name, price: data.price, category: data.category });
+    showToast("Label read successfully — please check the details before saving", "success");
+  } catch (err) {
+    document.getElementById("scanLabelLoading").style.display = "none";
+    document.getElementById("scanLabelIdle").style.display = "block";
+    const errBox = document.getElementById("scanLabelError");
+    errBox.textContent = err.message;
+    errBox.style.display = "block";
+  }
+}
+
+function openProductModal(product, prefill) {
   document.getElementById("productForm").reset();
-  document.getElementById("productModalTitle").textContent = product ? "Product Edit Karein" : "Naya Product";
+  document.getElementById("productModalTitle").textContent = product ? "Edit Product" : "New Product";
   document.getElementById("productId").value = product ? product.id : "";
-  document.getElementById("p_name").value = product ? product.name : "";
-  document.getElementById("p_category").value = product ? product.category : "General";
-  document.getElementById("p_price").value = product ? product.price : "";
+  document.getElementById("p_name").value = product ? product.name : (prefill?.name || "");
+  document.getElementById("p_category").value = product ? product.category : (prefill?.category || "General");
+  document.getElementById("p_price").value = product ? product.price : (prefill?.price ?? "");
   document.getElementById("p_quantity").value = product ? product.quantity : 0;
   document.getElementById("p_quantity").disabled = !!product; // stock changes go through Stock +/-
   document.getElementById("p_threshold").value = product ? product.low_stock_threshold : 5;

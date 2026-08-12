@@ -5,7 +5,7 @@ Run with:  uvicorn main:app --reload --host 0.0.0.0 --port 8000
 Then open  http://localhost:8000  in a browser (any device on the same
 network can use http://<your-computer-ip>:8000 instead of localhost).
 """
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,9 +21,10 @@ from auth import (
 )
 from qr_utils import generate_qr_id, generate_qr_image_bytes
 from pdf_utils import generate_receipt_pdf
+import label_scanner
 import schemas
 
-SHOP_NAME = "Dukaan Manager"  # change this to your actual shop name
+SHOP_NAME = os.environ.get("Priya Girls Collection", "Dukaan Manager")  # or set SHOP_NAME env var when deploying
 
 
 def require_self_or_admin(target_user_id: int, current_user: User):
@@ -50,13 +51,13 @@ def seed_default_admin():
         if not db.query(User).filter(User.role == "admin").first():
             admin = User(
                 name="Owner",
-                username="admin",
-                password_hash=hash_password("admin123"),
+                username="priya",
+                password_hash=hash_password("priya123"),
                 role="admin",
             )
             db.add(admin)
             db.commit()
-            print("Seeded default admin -> username: admin | password: admin123")
+            print("Seeded default admin -> username: priya | password: priya123")
             print("IMPORTANT: change this password after first login.")
     finally:
         db.close()
@@ -69,7 +70,8 @@ seed_default_admin()
 # ============================================================
 @app.post("/api/auth/login", response_model=schemas.TokenResponse)
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == payload.username).first()
+    clean_username = payload.username.strip().lower()
+    user = db.query(User).filter(func.lower(User.username) == clean_username).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     if not user.is_active:
@@ -90,13 +92,14 @@ def me(current_user: User = Depends(get_current_user)):
 # ============================================================
 @app.post("/api/users", response_model=schemas.UserOut)
 def create_user(payload: schemas.UserCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
-    if db.query(User).filter(User.username == payload.username).first():
+    clean_username = payload.username.strip().lower()
+    if db.query(User).filter(func.lower(User.username) == clean_username).first():
         raise HTTPException(status_code=400, detail="This username is already taken")
     if payload.role not in ("admin", "employee"):
         raise HTTPException(status_code=400, detail="Role must be admin or employee")
     user = User(
         name=payload.name,
-        username=payload.username,
+        username=clean_username,
         password_hash=hash_password(payload.password),
         role=payload.role,
     )
@@ -125,6 +128,31 @@ def toggle_user_active(user_id: int, db: Session = Depends(get_db), _admin=Depen
 # ============================================================
 # PRODUCTS (admin manages, everyone can read for scanning)
 # ============================================================
+@app.post("/api/products/scan-label")
+async def scan_product_label(file: UploadFile = File(...), _admin=Depends(require_admin)):
+    if not label_scanner.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Label scanning isn't set up on this server yet. Add an ANTHROPIC_API_KEY environment variable to enable it.",
+        )
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Please upload an image file")
+
+    image_bytes = await file.read()
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image is too large (max 10MB)")
+
+    try:
+        result = label_scanner.extract_label_info(image_bytes, file.content_type)
+    except RuntimeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    if not result["name"]:
+        raise HTTPException(status_code=422, detail="Couldn't find a product label in this photo -- try again with better lighting and the label filling more of the frame")
+
+    return result
+
+
 @app.post("/api/products", response_model=schemas.ProductOut)
 def create_product(payload: schemas.ProductCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     qr_id = generate_qr_id()
@@ -139,7 +167,7 @@ def create_product(payload: schemas.ProductCreate, db: Session = Depends(get_db)
     if product.quantity != 0:
         db.add(StockLog(
             product_id=product.id, change=product.quantity,
-            reason="initial_stock", note="Product create karte time initial stock"
+            reason="initial_stock", note="Initial stock set when product was created"
         ))
         db.commit()
     return product

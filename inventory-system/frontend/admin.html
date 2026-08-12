@@ -94,7 +94,7 @@
 <div class="sidebar">
   <div class="brand">
     <div class="brand-mark">DM</div>
-    <span>Dukaan Manager</span>
+    <span>Priya Girls Collections</span>
   </div>
   <div class="nav-item active" data-tab="dashboard"><span class="nav-icon">◆</span> Dashboard</div>
   <div class="nav-item" data-tab="products"><span class="nav-icon">▦</span> Products</div>
@@ -145,7 +145,10 @@
     <div class="tab-panel" id="tab-products">
       <div class="section-head">
         <h3>All Products</h3>
-        <button class="btn-accent" onclick="openProductModal()">+ New Product</button>
+        <div style="display:flex;gap:10px">
+          <button class="btn-ghost" onclick="openScanLabelModal()">📷 Scan Label</button>
+          <button class="btn-accent" onclick="openProductModal()">+ New Product</button>
+        </div>
       </div>
       <div class="card scroll-x">
         <table id="productsTable">
@@ -286,6 +289,34 @@
     </div>
   </div>
 </div>
+
+<!-- SCAN LABEL MODAL -->
+<div class="modal-overlay" id="scanLabelModalOverlay">
+  <div class="modal" style="text-align:center">
+    <h3>Scan Product Label</h3>
+    <p class="desc">Take a photo of the product's existing price tag or manufacturer label — the name and price will fill in automatically.</p>
+
+    <div id="scanLabelIdle">
+      <input type="file" id="labelFileInput" accept="image/*" capture="environment" style="display:none" onchange="handleLabelFile(this.files[0])">
+      <button class="btn-primary" style="width:100%" onclick="document.getElementById('labelFileInput').click()">📷 Take Photo / Choose Image</button>
+    </div>
+
+    <div id="scanLabelLoading" style="display:none;padding:20px 0">
+      <div style="width:70px;height:70px;border-radius:50%;margin:0 auto 14px;border:3px solid var(--amber-500);display:flex;align-items:center;justify-content:center;font-size:28px;animation:pulseOpacity 1.2s ease-in-out infinite">📷</div>
+      <p style="color:var(--text-600);font-size:14px">Reading the label...</p>
+    </div>
+
+    <div id="scanLabelError" style="display:none;text-align:left;margin-top:14px;background:var(--danger-bg);color:var(--danger);font-size:13px;padding:10px 12px;border-radius:var(--radius-sm)"></div>
+
+    <div class="form-actions" style="margin-top:16px">
+      <button class="btn-ghost" style="width:100%" onclick="closeScanLabelModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes pulseOpacity { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+</style>
 
 <!-- EMPLOYEE MODAL -->
 <div class="modal-overlay" id="employeeModalOverlay">

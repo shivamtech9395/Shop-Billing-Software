@@ -9,12 +9,13 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+import os
 
 from database import get_db, User
 
-# NOTE: change this secret before deploying to production.
-# Best practice: load from an environment variable instead.
-SECRET_KEY = "change-this-secret-key-before-deploying-to-production"
+# NOTE: change this secret before deploying to production, or better --
+# set a SECRET_KEY environment variable on your hosting platform.
+SECRET_KEY = os.environ.get("SECRET_KEY", "change-this-secret-key-before-deploying-to-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 12
 
