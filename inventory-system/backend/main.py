@@ -24,7 +24,7 @@ from pdf_utils import generate_receipt_pdf
 import label_scanner
 import schemas
 
-SHOP_NAME = os.environ.get("Priya Girls Collection", "Dukaan Manager")  # or set SHOP_NAME env var when deploying
+SHOP_NAME = os.environ.get("SHOP_NAME", "Dukaan Manager")  # or set SHOP_NAME env var when deploying
 
 
 def require_self_or_admin(target_user_id: int, current_user: User):
@@ -51,13 +51,13 @@ def seed_default_admin():
         if not db.query(User).filter(User.role == "admin").first():
             admin = User(
                 name="Owner",
-                username="priya",
-                password_hash=hash_password("priya123"),
+                username="admin",
+                password_hash=hash_password("admin123"),
                 role="admin",
             )
             db.add(admin)
             db.commit()
-            print("Seeded default admin -> username: priya | password: priya123")
+            print("Seeded default admin -> username: admin | password: admin123")
             print("IMPORTANT: change this password after first login.")
     finally:
         db.close()
