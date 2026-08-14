@@ -24,7 +24,9 @@ from pdf_utils import generate_receipt_pdf
 import label_scanner
 import schemas
 
-SHOP_NAME = os.environ.get("SHOP_NAME", "Dukaan Manager")  # or set SHOP_NAME env var when deploying
+SHOP_NAME = os.environ.get("SHOP_NAME", "Priya Girl's Collections")  # or set SHOP_NAME env var when deploying
+SHOP_ADDRESS = os.environ.get("SHOP_ADDRESS", "sadar bajar ,Gurugram")  # e.g. "123 Main Market, Gurugram"
+SHOP_PHONE = os.environ.get("SHOP_PHONE", "8265891350")  # e.g. "+91 98765 43210"
 
 
 def require_self_or_admin(target_user_id: int, current_user: User):
@@ -81,7 +83,13 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         access_token=token, role=user.role, name=user.name, user_id=user.id
     )
 
+@app.get("/api/shop-info")
+def get_shop_info():
+    """Public endpoint -- used by the billing screen to show/share shop details on bills."""
+    return {"name": SHOP_NAME, "address": SHOP_ADDRESS, "phone": SHOP_PHONE}
 
+
+@app.get("/api/auth/me", response_model=schemas.UserOut)
 @app.get("/api/auth/me", response_model=schemas.UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
@@ -348,7 +356,7 @@ def get_transaction_pdf(transaction_id: int, db: Session = Depends(get_db), curr
         raise HTTPException(status_code=404, detail="Bill not found")
     require_self_or_admin(txn.employee_id, current_user)
     employee = db.query(User).filter(User.id == txn.employee_id).first()
-    pdf_bytes = generate_receipt_pdf(SHOP_NAME, txn, employee.name if employee else "Staff")
+    pdf_bytes = generate_receipt_pdf(SHOP_NAME, txn, employee.name if employee else "Staff", SHOP_ADDRESS, SHOP_PHONE)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

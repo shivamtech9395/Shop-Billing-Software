@@ -1,6 +1,13 @@
 requireAuth(["admin", "employee"]);
 document.getElementById("empName").textContent = API.getName();
 
+let shopInfo = { name: "", address: "", phone: "" };
+(async function loadShopInfo() {
+  try {
+    shopInfo = await API.get("/api/shop-info");
+  } catch (e) { /* fine to proceed without it */ }
+})();
+
 let cart = []; // { product, quantity, price_override }
 let scanMode = localStorage.getItem("scan_mode") || "camera";
 let html5QrCode = null;
@@ -317,18 +324,25 @@ function showSuccessModal(txn) {
 }
 
 function buildWhatsappLink(txn) {
-  const lines = [`*Bill #${txn.id}*`, new Date(txn.created_at).toLocaleString("en-IN"), ""];
+  const lines = [];
+  lines.push(`*${shopInfo.name || "Bill"}*`);
+  if (shopInfo.address) lines.push(shopInfo.address);
+  if (shopInfo.phone) lines.push(shopInfo.phone);
+  lines.push("");
+  lines.push(`Bill #${txn.id}`);
+  lines.push(new Date(txn.created_at).toLocaleString("en-IN"));
+  lines.push("");
   txn.items.forEach(item => {
     lines.push(`${item.product_name_snapshot} x${item.quantity} = ${formatMoney(item.price_at_sale * item.quantity)}`);
   });
   lines.push("");
-  lines.push(`Total: ${formatMoney(txn.total_amount)}`);
+  lines.push(`*Total: ${formatMoney(txn.total_amount)}*`);
+  lines.push("");
   lines.push("Thank you for shopping with us!");
   const message = lines.join("\n");
   const digitsOnly = (txn.customer_phone || "").replace(/\D/g, "");
   return `https://wa.me/${digitsOnly}?text=${encodeURIComponent(message)}`;
 }
-
 function closeSuccessModal() {
   document.getElementById("successModalOverlay").classList.remove("show");
   lastCompletedTransaction = null;
