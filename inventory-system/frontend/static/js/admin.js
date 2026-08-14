@@ -108,7 +108,7 @@ function toggleCommissionFields() {
 }
 
 // ============================================================
-// SCAN LABEL (AI reads a photo of the product's existing tag)
+// SCAN LABEL (free, in-browser OCR reads the photo -- no API key needed)
 // ============================================================
 function openScanLabelModal() {
   document.getElementById("scanLabelIdle").style.display = "block";
@@ -128,26 +128,67 @@ async function handleLabelFile(file) {
   document.getElementById("scanLabelLoading").style.display = "block";
 
   try {
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch("/api/products/scan-label", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + API.getToken() },
-      body: formData,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Could not read the label");
+    const { data: { text } } = await Tesseract.recognize(file, "eng");
+    const parsed = parseLabelText(text);
+
+    if (!parsed.name && parsed.price === null) {
+      throw new Error("Couldn't read any text clearly on this label. Try a closer, well-lit photo, or enter details manually.");
+    }
 
     closeScanLabelModal();
-    openProductModal(null, { name: data.name, price: data.price, category: data.category });
-    showToast("Label read successfully — please check the details before saving", "success");
+    openProductModal(null, parsed);
+    showToast("Label scanned — please double-check the details before saving", "success");
   } catch (err) {
     document.getElementById("scanLabelLoading").style.display = "none";
     document.getElementById("scanLabelIdle").style.display = "block";
     const errBox = document.getElementById("scanLabelError");
-    errBox.textContent = err.message;
+    errBox.textContent = err.message || "Could not read the label. Try a clearer photo.";
     errBox.style.display = "block";
   }
+}
+
+// Simple heuristics to pull a likely product name + price out of raw OCR text.
+// Not perfect -- the admin always reviews/edits before saving.
+function parseLabelText(rawText) {
+  const lines = rawText
+    .split("\n")
+    .map(l => l.trim())
+    .filter(l => l.length > 0);
+
+  // Look for a price: prefer lines with a currency symbol/word near a number
+  const priceRegex = /(?:₹|rs\.?|mrp\.?|price)\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)/i;
+  let price = null;
+  for (const line of lines) {
+    const m = line.match(priceRegex);
+    if (m) {
+      price = parseFloat(m[1].replace(",", "."));
+      break;
+    }
+  }
+  // Fallback: any standalone reasonable-looking number
+  if (price === null) {
+    for (const line of lines) {
+      const m = line.match(/\b(\d{1,5}(?:\.\d{1,2})?)\b/);
+      if (m) {
+        const val = parseFloat(m[1]);
+        if (val > 0 && val < 100000) { price = val; break; }
+      }
+    }
+  }
+
+  // Name: the longest line that has real letters and isn't the price line
+  let name = null;
+  let bestScore = 0;
+  for (const line of lines) {
+    if (priceRegex.test(line)) continue;
+    const letters = (line.match(/[a-zA-Z]/g) || []).length;
+    if (letters > 3 && letters > bestScore) {
+      bestScore = letters;
+      name = line;
+    }
+  }
+
+  return { name: name || "", price: price, category: null };
 }
 
 function openProductModal(product, prefill) {

@@ -133,7 +133,7 @@ async def scan_product_label(file: UploadFile = File(...), _admin=Depends(requir
     if not label_scanner.is_available():
         raise HTTPException(
             status_code=503,
-            detail="Label scanning isn't set up on this server yet. Add an ANTHROPIC_API_KEY environment variable to enable it.",
+            detail="Label scanning isn't set up on this server yet. Add a free OCR_SPACE_API_KEY environment variable to enable it (get one at ocr.space/ocrapi/freekey).",
         )
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Please upload an image file")
@@ -146,6 +146,8 @@ async def scan_product_label(file: UploadFile = File(...), _admin=Depends(requir
         result = label_scanner.extract_label_info(image_bytes, file.content_type)
     except RuntimeError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error while reading the label: {e}")
 
     if not result["name"]:
         raise HTTPException(status_code=422, detail="Couldn't find a product label in this photo -- try again with better lighting and the label filling more of the frame")

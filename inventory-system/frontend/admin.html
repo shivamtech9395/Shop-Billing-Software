@@ -294,7 +294,7 @@
 <div class="modal-overlay" id="scanLabelModalOverlay">
   <div class="modal" style="text-align:center">
     <h3>Scan Product Label</h3>
-    <p class="desc">Take a photo of the product's existing price tag or manufacturer label — the name and price will fill in automatically.</p>
+    <p class="desc">Take a photo of the product's existing price tag or manufacturer label — this reads the text automatically (free, works in your browser). Please double-check the details before saving, since automatic reading isn't always perfect.</p>
 
     <div id="scanLabelIdle">
       <input type="file" id="labelFileInput" accept="image/*" capture="environment" style="display:none" onchange="handleLabelFile(this.files[0])">
@@ -391,6 +391,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="/static/js/api.js"></script>
 <script src="/static/js/admin.js"></script>
 </body>
